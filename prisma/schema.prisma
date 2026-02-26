@@ -1,0 +1,201 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  CASHIER
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  READY
+  COMPLETED
+  DELIVERED
+  CANCELLED
+}
+
+enum DeliveryType {
+  PICKUP
+  DELIVERY
+  PENDING
+}
+
+enum ServiceType {
+  WASH_ONLY
+  WASH_IRON
+  DRY_CLEAN
+  EXPRESS
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  phone       String
+  address     String?
+  logo        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  locations   Location[]
+  users       User[]
+  customers   Customer[]
+  orders      Order[]
+}
+
+model Location {
+  id             String   @id @default(cuid())
+  name           String
+  address        String
+  phone          String
+  organizationId String
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  orders         Order[]
+  users          User[]
+  
+  @@index([organizationId])
+}
+
+model User {
+  id             String   @id @default(cuid())
+  name           String
+  email          String?  @unique
+  pin            String?  // Hashed PIN for cashiers
+  role           UserRole
+  organizationId String
+  locationId     String?
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location       Location?    @relation(fields: [locationId], references: [id])
+  orders         Order[]
+  
+  @@index([organizationId])
+  @@index([locationId])
+}
+
+model Customer {
+  id             String   @id @default(cuid())
+  name           String
+  phone          String   
+  address        String?
+  organizationId String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  orders         Order[]
+  messages       Message[]
+  
+  @@unique([phone, organizationId])
+  @@index([organizationId])
+  @@index([phone])
+}
+
+model Order {
+  id              String       @id @default(cuid())
+  orderNumber     String       @unique
+  customerId      String
+  organizationId  String
+  locationId      String
+  userId          String
+  status          OrderStatus  @default(PENDING)
+  deliveryType    DeliveryType @default(PENDING)
+  subtotal        Float        @default(0)
+  deliveryFee     Float        @default(0)
+  totalAmount     Float        @default(0)
+  paid            Boolean      @default(false)
+  paymentMethod   String?
+  paymentRef      String?
+  readyAt         DateTime?
+  completedAt     DateTime?
+  deliveredAt     DateTime?
+  notes           String?
+  synced          Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  
+  customer        Customer     @relation(fields: [customerId], references: [id])
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  location        Location     @relation(fields: [locationId], references: [id])
+  user            User         @relation(fields: [userId], references: [id])
+  items           OrderItem[]
+  messages        Message[]
+  
+  @@index([customerId])
+  @@index([organizationId])
+  @@index([locationId])
+  @@index([status])
+  @@index([orderNumber])
+}
+
+model OrderItem {
+  id          String      @id @default(cuid())
+  orderId     String
+  itemType    String      // Shirt, Pants, Dress, etc.
+  serviceType ServiceType
+  quantity    Int         @default(1)
+  color       String?
+  brand       String?
+  defects     String?     // Vivid description of stains, tears, etc.
+  price       Float
+  imageUrl    String?     // Optional photo of item/defect
+  returned    Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  
+  order       Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  @@index([orderId])
+}
+
+model Message {
+  id         String      @id @default(cuid())
+  customerId String
+  orderId    String?
+  content    String      @db.Text
+  role       MessageRole
+  metadata   Json?       // Store additional context
+  createdAt  DateTime    @default(now())
+  
+  customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  order      Order?      @relation(fields: [orderId], references: [id])
+  
+  @@index([customerId])
+  @@index([orderId])
+  @@index([createdAt])
+}
+
+model Settings {
+  id                  String   @id @default(cuid())
+  organizationId      String   @unique
+  businessName        String
+  businessLogo        String?
+  defaultDeliveryFee  Float    @default(1500)
+  taxRate             Float    @default(0)
+  currency            String   @default("NGN")
+  autoReminder        Boolean  @default(true)
+  reminderInterval    Int      @default(24) // hours
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  @@index([organizationId])
+}
